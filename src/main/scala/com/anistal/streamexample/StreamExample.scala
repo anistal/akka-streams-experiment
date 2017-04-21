@@ -10,13 +10,15 @@ import akka.stream._
 import akka.stream.scaladsl.{Flow, GraphDSL, RunnableGraph, Sink}
 import com.anistal.streamexample.commons.constants.Md5Schema
 import com.anistal.streamexample.commons.logging.AppLogging
-import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
+import redis.RedisClient
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.TableQuery
-import scala.concurrent.duration._
 
 import scala.concurrent.Await
+import scala.concurrent.duration._
+
 
 object StreamExample extends App with AppLogging {
 
@@ -24,6 +26,8 @@ object StreamExample extends App with AppLogging {
 
   val db = Database.forConfig("mongo-event-collector.postgresql")
   val tableMd5 = TableQuery[Md5Schema]
+
+  val redis = RedisClient()
 
   val decider: Supervision.Decider = { exception =>
     log.error(exception.getLocalizedMessage, exception)
@@ -41,6 +45,8 @@ object StreamExample extends App with AppLogging {
   val consumerSettings = ConsumerSettings(system, new StringDeserializer, new StringDeserializer)
     .withBootstrapServers(bootstrapServer)
     .withGroupId("group")
+    .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true")
+
   //.withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
   def append(x: Any): Unit = {
@@ -52,11 +58,10 @@ object StreamExample extends App with AppLogging {
     def uuid = UUID.randomUUID().toString
     def md5 = x.toString
 
-    val result = db.run(
-      DBIO.seq(
-        tableMd5 ++= Seq((uuid, md5))
-      )
-    )
+    val result = for {
+      _ <- db.run(DBIO.seq(tableMd5 ++= Seq((uuid, md5))))
+      _ <- redis.set(uuid, md5)
+    } yield { }
 
     result onFailure {
       case ex => ex.printStackTrace
@@ -93,7 +98,7 @@ object StreamExample extends App with AppLogging {
 
       // Sinks
       //val E: Inlet[Any] = builder.add(Sink.foreach(append)).in
-      val F: Inlet[Any] = builder.add(Sink.foreach(writeToDatabase)).in
+      val F: Inlet[Any] = builder.add(Sink.foreachParallel(10)(writeToDatabase)).in
 
       // Graph
       A ~> B ~> C ~> D
@@ -105,4 +110,5 @@ object StreamExample extends App with AppLogging {
   // @formatter:on
 
   g.run()
+
 }

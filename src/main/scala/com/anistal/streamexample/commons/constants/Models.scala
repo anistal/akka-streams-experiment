@@ -29,6 +29,6 @@ object Main extends App {
     case Failure(ex) => ex.printStackTrace
   }
 
-  Thread.sleep(50000L)
+  Thread.sleep(1000L)
 
 }

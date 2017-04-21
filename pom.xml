@@ -144,6 +144,11 @@
             <artifactId>logback-classic</artifactId>
             <version>${logback-classic.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.github.etaty</groupId>
+            <artifactId>rediscala_2.11</artifactId>
+            <version>1.5.0</version>
+        </dependency>
         <!-- TEST -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
